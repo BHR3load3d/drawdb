@@ -25,6 +25,8 @@ export const getModalTitle = (modal) => {
       return i18n.t("language");
     case MODAL.SHARE:
       return i18n.t("share");
+    case MODAL.MANAGE_REPOSITORIES:
+      return i18n.t("manage_repositories");
     default:
       return "";
   }
@@ -37,6 +39,8 @@ export const getModalWidth = (modal) => {
     case MODAL.CODE:
     case MODAL.NEW:
       return 740;
+    case MODAL.MANAGE_REPOSITORIES:
+      return 1000;
     default:
       return 600;
   }
@@ -60,6 +64,8 @@ export const getOkText = (modal) => {
       return i18n.t("create");
     case MODAL.SHARE:
       return i18n.t("share");
+    case MODAL.MANAGE_REPOSITORIES:
+      return i18n.t("close");
     default:
       return i18n.t("confirm");
   }

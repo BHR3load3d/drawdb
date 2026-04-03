@@ -68,6 +68,7 @@ import { enterFullscreen, exitFullscreen } from "../../utils/fullscreen";
 import { dataURItoBlob } from "../../utils/utils";
 import { IconAddArea, IconAddNote, IconAddTable } from "../../icons";
 import LayoutDropdown from "./LayoutDropdown";
+import RepositorySelector from "../RepositorySelector";
 import Sidesheet from "./SideSheet/Sidesheet";
 import Modal from "./Modal/Modal";
 import { useTranslation } from "react-i18next";
@@ -86,6 +87,7 @@ import { deleteFromCache, STORAGE_KEY } from "../../utils/cache";
 import { useLiveQuery } from "dexie-react-hooks";
 import { DateTime } from "luxon";
 import ConfigureCustomTypes from "./ConfigureCustomTypes";
+import { useSaveToGitHub } from "../../hooks/useSaveToGitHub";
 
 export default function ControlPanel({ title, setTitle, lastSaved }) {
   const { id: diagramId } = useParams();
@@ -117,6 +119,7 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
     deleteRelationship,
     updateRelationship,
     database,
+    sourceInfo,
   } = useDiagram();
   const { enums, setEnums, deleteEnum, addEnum, updateEnum } = useEnums();
   const { types, addType, deleteType, updateType, setTypes } = useTypes();
@@ -129,6 +132,9 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
   const { version, gistId, setGistId } = useContext(IdContext);
   const isTemplate = useMatch("/editor/templates/:id");
   const navigate = useNavigate();
+  
+  // Hook para guardar al repositorio
+  const { saveToRepository, isSaving } = useSaveToGitHub();
 
   const invertLayout = (component) =>
     setLayout((prev) => ({ ...prev, [component]: !prev[component] }));
@@ -749,6 +755,11 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
     setLayout((prev) => ({ ...prev, dbmlEditor: !prev.dbmlEditor }));
   };
   const save = () => setSaveState(State.SAVING);
+  const handleSaveToRepository = async () => {
+    const token = import.meta.env.VITE_GITHUB_TOKEN || '';
+    const diagram = { tables, relationships, enums, types, notes, areas, database };
+    await saveToRepository(diagram, sourceInfo, token);
+  };
   const recentlyOpenedDiagrams = useLiveQuery(() =>
     db.diagrams.orderBy("lastModified").reverse().limit(10).toArray(),
   );
@@ -1517,6 +1528,9 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
             });
         },
       },
+      manage_repositories: {
+        function: () => setModal(MODAL.MANAGE_REPOSITORIES),
+      },
     },
     help: {
       docs: {
@@ -1715,6 +1729,8 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
             </button>
           </Tooltip>
           <Divider layout="vertical" margin="8px" />
+          <RepositorySelector />
+          <Divider layout="vertical" margin="8px" />
           <Tooltip content={t("add_table")} position="bottom">
             <button
               className="flex items-center py-1 px-2 hover-2 rounded-sm disabled:opacity-50"
@@ -1750,6 +1766,17 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
               disabled={layout.readOnly}
             >
               <IconSaveStroked size="extra-large" />
+            </button>
+          </Tooltip>
+          <Divider layout="vertical" margin="8px" />
+          <Tooltip content="Guardar en repositorio" position="bottom">
+            <button
+              className="py-1 px-2 hover-2 rounded-sm flex items-center disabled:opacity-50"
+              onClick={handleSaveToRepository}
+              disabled={layout.readOnly || !sourceInfo || isSaving}
+              title={sourceInfo ? `${sourceInfo.owner}/${sourceInfo.repo}/${sourceInfo.filePath}` : 'Importa un DBML primero'}
+            >
+              <i className="fa-solid fa-cloud-arrow-up text-xl" />
             </button>
           </Tooltip>
           <Divider layout="vertical" margin="8px" />

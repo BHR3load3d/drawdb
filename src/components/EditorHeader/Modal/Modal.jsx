@@ -32,6 +32,7 @@ import Open from "./Open";
 import Rename from "./Rename";
 import SetTableWidth from "./SetTableWidth";
 import Share from "./Share";
+import RepositoryABM from "../../RepositoryABM";
 import { useNavigate } from "react-router-dom";
 import { mergeCustomTypes } from "../../../utils/customTypes";
 
@@ -218,6 +219,9 @@ export default function Modal({
         setSettings((prev) => ({ ...prev, tableWidth: tempTableWidth }));
         setModal(MODAL.NONE);
         return;
+      case MODAL.MANAGE_REPOSITORIES:
+        setModal(MODAL.NONE);
+        return;
       default:
         setModal(MODAL.NONE);
         return;
@@ -321,6 +325,12 @@ export default function Modal({
         );
       case MODAL.SHARE:
         return <Share title={title} setModal={setModal} />;
+      case MODAL.MANAGE_REPOSITORIES:
+        return (
+          <div style={{ maxHeight: "600px", overflow: "auto" }}>
+            <RepositoryABM />
+          </div>
+        );
       default:
         return <></>;
     }

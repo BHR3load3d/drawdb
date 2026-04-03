@@ -12,6 +12,7 @@ export default function DiagramContextProvider({ children }) {
   const [database, setDatabase] = useState(DB.GENERIC);
   const [tables, setTables] = useState([]);
   const [relationships, setRelationships] = useState([]);
+  const [sourceInfo, setSourceInfo] = useState(null); // {repoId, filePath, owner, repo, branch}
   const { transform } = useTransform();
   const { setUndoStack, setRedoStack } = useUndoRedo();
   const { selectedElement, setSelectedElement } = useSelect();
@@ -246,6 +247,8 @@ export default function DiagramContextProvider({ children }) {
         updateRelationship,
         database,
         setDatabase,
+        sourceInfo,
+        setSourceInfo,
         tablesCount: tables.length,
         relationshipsCount: relationships.length,
       }}

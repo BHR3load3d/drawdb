@@ -1,0 +1,316 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-04-02T00:00:00Z",
+  "description": "Configuración centralizada de repositorios de GitHub para DrawDB. Almacena datos de repos para sincronización, integración y exportación de diagramas.",
+  
+  "repositories": [
+    {
+      "id": "repo-001",
+      "name": "drawdb-main",
+      "owner": "drawdb-io",
+      "url": "https://github.com/drawdb-io/drawdb",
+      "description": "Repositorio principal de DrawDB",
+      "type": "public",
+      "enabled": true,
+      "branch": "main",
+      "defaultBranch": "main",
+      "topics": ["database", "diagram", "erd", "sql", "visualization"],
+      
+      "api": {
+        "endpoint": "https://api.github.com/repos/drawdb-io/drawdb",
+        "rate_limit": 60,
+        "rate_limit_reset": 3600
+      },
+      
+      "directories": {
+        "schemas": "src/data/schemas.js",
+        "templates": "src/templates/",
+        "exports": "exports/",
+        "imports": "imports/"
+      },
+      
+      "integrations": {
+        "gists": {
+          "enabled": true,
+          "prefix": "drawdb-",
+          "description": "DrawDB Diagram"
+        },
+        "issues": {
+          "enabled": true,
+          "labels": ["bug", "feature", "enhancement", "documentation"]
+        },
+        "discussions": {
+          "enabled": true,
+          "category": "General"
+        }
+      },
+      
+      "sync": {
+        "enabled": true,
+        "frequency": "hourly",
+        "lastSync": "2026-04-02T12:00:00Z",
+        "autoCommit": true,
+        "commitMessage": "[DrawDB Auto-Sync] Database diagram update"
+      },
+      
+      "authentication": {
+        "type": "token",
+        "tokenEnvVar": "GITHUB_TOKEN",
+        "scopes": ["repo", "gist", "user:email"],
+        "expiresAt": "2027-04-02T00:00:00Z"
+      },
+      
+      "storage": {
+        "format": "json",
+        "compression": "none",
+        "encryption": false,
+        "maxFileSize": 10485760
+      }
+    },
+    
+    {
+      "id": "repo-002",
+      "name": "drawdb-server",
+      "owner": "drawdb-io",
+      "url": "https://github.com/drawdb-io/drawdb-server",
+      "description": "Servidor backend para DrawDB (compartir diagramas)",
+      "type": "public",
+      "enabled": true,
+      "branch": "main",
+      "defaultBranch": "main",
+      "topics": ["server", "api", "backend", "nodejs", "express"],
+      
+      "api": {
+        "endpoint": "https://api.github.com/repos/drawdb-io/drawdb-server",
+        "rate_limit": 60,
+        "rate_limit_reset": 3600
+      },
+      
+      "directories": {
+        "routes": "src/routes/",
+        "models": "src/models/",
+        "controllers": "src/controllers/",
+        "database": "src/database/"
+      },
+      
+      "integrations": {
+        "gists": {
+          "enabled": true,
+          "prefix": "drawdb-server-",
+          "description": "DrawDB Server Configuration"
+        },
+        "issues": {
+          "enabled": true,
+          "labels": ["backend", "api", "database"]
+        }
+      },
+      
+      "sync": {
+        "enabled": true,
+        "frequency": "daily",
+        "lastSync": "2026-04-01T12:00:00Z",
+        "autoCommit": false,
+        "commitMessage": "[DrawDB Server Sync]"
+      },
+      
+      "authentication": {
+        "type": "token",
+        "tokenEnvVar": "GITHUB_TOKEN_SERVER",
+        "scopes": ["repo"],
+        "expiresAt": "2027-04-02T00:00:00Z"
+      },
+      
+      "storage": {
+        "format": "json",
+        "compression": "gzip",
+        "encryption": true,
+        "maxFileSize": 52428800
+      }
+    }
+  ],
+
+  "globalSettings": {
+    "defaultFormat": "json",
+    "timezone": "UTC",
+    "language": "en",
+    "retentionDays": 90,
+    "cacheDuration": 3600
+  },
+
+  "apiConfiguration": {
+    "baseUrl": "https://api.github.com",
+    "timeout": 30000,
+    "retries": 3,
+    "retryDelay": 1000,
+    "userAgent": "DrawDB/1.0"
+  },
+
+  "dataExport": {
+    "formats": ["json", "csv", "sql"],
+    "schedules": [
+      {
+        "id": "export-daily",
+        "frequency": "daily",
+        "time": "00:00",
+        "format": "json",
+        "includeMetadata": true
+      },
+      {
+        "id": "export-weekly",
+        "frequency": "weekly",
+        "day": "monday",
+        "time": "02:00",
+        "format": "json",
+        "compress": true
+      }
+    ],
+    "destination": {
+      "type": "local",
+      "path": "./exports/",
+      "remote": {
+        "enabled": false,
+        "provider": "s3",
+        "bucket": "drawdb-exports"
+      }
+    }
+  },
+
+  "webhooks": [
+    {
+      "id": "webhook-001",
+      "name": "on-push",
+      "event": "push",
+      "enabled": true,
+      "url": "${WEBHOOK_BASE_URL}/github/push",
+      "headers": {
+        "X-Custom-Header": "DrawDB-Webhook"
+      },
+      "secret": "${WEBHOOK_SECRET}"
+    },
+    {
+      "id": "webhook-002",
+      "name": "on-pull-request",
+      "event": "pull_request",
+      "enabled": true,
+      "url": "${WEBHOOK_BASE_URL}/github/pr",
+      "actions": ["opened", "synchronize", "closed"]
+    }
+  ],
+
+  "environmentVariables": {
+    "GITHUB_TOKEN": {
+      "description": "Token de acceso personal de GitHub",
+      "required": true,
+      "scope": "repo, gist, user:email"
+    },
+    "GITHUB_TOKEN_SERVER": {
+      "description": "Token alternativo para servidor backend",
+      "required": false
+    },
+    "WEBHOOK_BASE_URL": {
+      "description": "URL base para webhooks",
+      "required": false,
+      "example": "https://drawdb-server.example.com/api"
+    },
+    "WEBHOOK_SECRET": {
+      "description": "Secreto para validar webhooks de GitHub",
+      "required": false
+    }
+  },
+
+  "monitoring": {
+    "enabled": true,
+    "logLevel": "info",
+    "metrics": {
+      "trackApiCalls": true,
+      "trackSyncEvents": true,
+      "trackErrors": true
+    },
+    "alerts": {
+      "enabled": true,
+      "email": "admin@drawdb.io",
+      "slackWebhook": "${SLACK_WEBHOOK_URL}"
+    }
+  },
+
+  "security": {
+    "tokenRotation": {
+      "enabled": true,
+      "frequency": "monthly"
+    },
+    "ipWhitelist": {
+      "enabled": false,
+      "ips": []
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "requestsPerMinute": 60,
+      "requestsPerHour": 1000
+    }
+  },
+
+  "dataMapping": {
+    "diagramschema": {
+      "source": "github",
+      "format": "json",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "description": "string",
+        "tables": "array",
+        "relationships": "array",
+        "areas": "array",
+        "notes": "array",
+        "types": "array",
+        "enums": "array",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    },
+    "tableSchema": {
+      "source": "github",
+      "format": "json",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "fields": "array",
+        "comment": "string",
+        "color": "string"
+      }
+    }
+  },
+
+  "templates": [
+    {
+      "id": "template-basic-shop",
+      "name": "Basic E-Commerce Shop",
+      "repository": "repo-001",
+      "path": "src/templates/template1.js",
+      "description": "Esquema básico para tienda online",
+      "tags": ["ecommerce", "basic"]
+    },
+    {
+      "id": "template-complex-app",
+      "name": "Complex Application Database",
+      "repository": "repo-001",
+      "path": "src/templates/template2.js",
+      "description": "Esquema complejo para aplicación empresarial",
+      "tags": ["enterprise", "complex"]
+    }
+  ],
+
+  "documentation": {
+    "apiDocs": "https://docs.github.com/en/rest",
+    "drawdbDocs": "https://drawdb.app/docs",
+    "integrationGuide": "./docs/GITHUB_INTEGRATION.md"
+  },
+
+  "metadata": {
+    "createdBy": "DrawDB Team",
+    "createdAt": "2026-04-02T00:00:00Z",
+    "version": "1.0",
+    "status": "active",
+    "deprecatedFields": [],
+    "notes": "Configuración centralizada para integración con GitHub. Mantener sincronizado con cambios de API de GitHub."
+  }
+}

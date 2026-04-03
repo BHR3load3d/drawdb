@@ -164,6 +164,7 @@ const es = {
     export_image: "Exportar imagen",
     create: "Crear",
     confirm: "Confirmar",
+    close: "Cerrar",
     last_modified: "Última modificación",
     drag_and_drop_files: "Arrastra y suelta el archivo aquí o haz clic para subir.",
     upload_sql_to_generate_diagrams:
@@ -257,6 +258,7 @@ const es = {
     bulk_update: "Actualización en bloque",
     multiselect: "Multiselector",
     export_saved_data: "Exportar los datos guardados",
+    manage_repositories: "Administrar repositorios",
     dbml_view: "Vista DBML",
     tab_view: "Vista de pestañas",
     label: "Etiqueta",
@@ -279,6 +281,14 @@ const es = {
     failed_to_record_version: "Error al grabar versión",
     failed_to_load_diagram: "Error al cargar diagrama",
     see_all: "Ver todo",
+    select_repository: "Seleccionar repositorio",
+    select_dbml_file: "Seleccionar archivo DBML",
+    no_dbml_files_found: "No se encontraron archivos DBML",
+    dbml_files_found: "Archivo(s) DBML encontrado(s)",
+    enter_file_path_manually: "Ingresa la ruta del archivo manualmente",
+    select_repo_and_file: "Por favor selecciona un repositorio y un archivo DBML o ingresa la ruta",
+    dbml_imported_successfully: "DBML importado exitosamente",
+    error: "Error",
   },
 };
 
