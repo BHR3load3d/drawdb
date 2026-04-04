@@ -782,11 +782,24 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
       types
     };
     
+    console.log('[ControlPanel] Iniciando guardado...');
+    console.log(`[ControlPanel] sourceInfo:`, sourceInfo);
+    console.log(`[ControlPanel] Tablas: ${tables.length}, Relaciones: ${relationships.length}`);
+    
     // Primero guardar localmente en IndexedDB
     setSaveState(State.SAVING);
     
     // Luego sincronizar con el repositorio
-    await saveToRepository(diagram, diagramConfig, sourceInfo, token, setSourceInfo);
+    const result = await saveToRepository(diagram, diagramConfig, sourceInfo, token, setSourceInfo);
+    console.log('[ControlPanel] Resultado de guardado:', result);
+    
+    if (result.success) {
+      console.log('[ControlPanel] ✓ Guardado exitoso');
+      // Esperar un bit y luego marcar como SAVED
+      setTimeout(() => {
+        setSaveState(State.SAVED);
+      }, 500);
+    }
   };
   const recentlyOpenedDiagrams = useLiveQuery(() =>
     db.diagrams.orderBy("lastModified").reverse().limit(10).toArray(),
@@ -1791,20 +1804,13 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
             <button
               className="py-1 px-2 hover-2 rounded-sm flex items-center disabled:opacity-50"
               onClick={save}
-              disabled={layout.readOnly}
+              disabled={layout.readOnly || isSaving}
             >
-              <IconSaveStroked size="extra-large" />
-            </button>
-          </Tooltip>
-          <Divider layout="vertical" margin="8px" />
-          <Tooltip content="Guardar en repositorio" position="bottom">
-            <button
-              className="py-1 px-2 hover-2 rounded-sm flex items-center disabled:opacity-50"
-              onClick={handleSaveToRepository}
-              disabled={layout.readOnly || !sourceInfo || isSaving}
-              title={sourceInfo ? `${sourceInfo.owner}/${sourceInfo.repo}/${sourceInfo.filePath}` : 'Importa un DBML primero'}
-            >
-              <i className="fa-solid fa-cloud-arrow-up text-xl" />
+              {isSaving ? (
+                <Spin size="small" />
+              ) : (
+                <IconSaveStroked size="extra-large" />
+              )}
             </button>
           </Tooltip>
           <Divider layout="vertical" margin="8px" />

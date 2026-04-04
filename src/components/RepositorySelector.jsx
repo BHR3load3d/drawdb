@@ -4,13 +4,15 @@ import repositoryManagementService from '../services/repositoryManagement';
 import dbmlImportService from '../services/dbmlImport';
 import { useDBMLImport } from '../hooks/useDBMLImport';
 import { useTranslation } from 'react-i18next';
+import { State } from '../data/constants';
 import { 
   useDiagram,
   useTransform,
   useAreas,
   useNotes,
   useEnums,
-  useTypes
+  useTypes,
+  useSaveState
 } from '../hooks';
 
 export default function RepositorySelector() {
@@ -22,6 +24,7 @@ export default function RepositorySelector() {
   const { setNotes } = useNotes();
   const { setEnums } = useEnums();
   const { setTypes } = useTypes();
+  const { saveState } = useSaveState();
   
   const [repositories, setRepositories] = useState(
     repositoryManagementService.getAllRepositories()
@@ -34,6 +37,68 @@ export default function RepositorySelector() {
   const [manualFilePath, setManualFilePath] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const prevIsNewRef = useRef(sourceInfo?.isNew); // Rastrear cambios de isNew
+  const confirmPendingRef = useRef(false); // Rastrear si ya confirmamos en este ciclo
+  const currentRepoRef = useRef(null); // Cache del repositorio actual para evitar dependencias stale
+
+  // Actualizar el cache del repositorio seleccionado
+  useEffect(() => {
+    if (selectedRepo) {
+      const allRepos = repositories?.filter(r => r.enabled) || [];
+      const repo = allRepos.find(r => r.id === selectedRepo);
+      if (repo) {
+        currentRepoRef.current = repo;
+        console.log(`[RepositorySelector] Cache del repo actualizado: ${repo.owner}/${repo.name}`);
+      }
+    }
+  }, [selectedRepo, repositories]);
+
+  // Auto-confirmar nombre pendiente cuando el usuario intenta guardar
+  useEffect(() => {
+    if (saveState === State.SAVING && selectedFile === 'NEW' && newFileName.trim() && !sourceInfo?.isNew && !confirmPendingRef.current) {
+      console.log(`[RepositorySelector] Confirmando nombre pendiente automáticamente para guardar...`);
+      confirmPendingRef.current = true;
+      // Ejecutar handleImport() será necesario, voy a usar setTimeout para asegurar que se ejecute
+      // después del render actual
+      setTimeout(() => {
+        // El problema es que handleImport no está definido aún. Voy a hacer la lógica aquí.
+        if (!selectedRepo) {
+          Toast.error({
+            content: 'Por favor selecciona un repositorio',
+            duration: 3
+          });
+          confirmPendingRef.current = false;
+          return;
+        }
+
+        const fileName = newFileName.trim();
+        if (!fileName) {
+          Toast.error({
+            content: 'Por favor ingresa un nombre para el archivo',
+            duration: 3
+          });
+          confirmPendingRef.current = false;
+          return;
+        }
+        
+        // Agregar extensión si no la tiene
+        const dbmlFileName = fileName.endsWith('.dbml') ? fileName : fileName + '.dbml';
+        const allRepos = repositories?.filter(r => r.enabled) || [];
+        const repo = allRepos.find(r => r.id === selectedRepo);
+        
+        // Guardar información para el commit
+        setSourceInfo({
+          repoId: selectedRepo,
+          filePath: dbmlFileName,
+          owner: repo?.owner,
+          repo: repo?.name,
+          branch: repo?.branch,
+          isNew: true
+        });
+        
+        console.log(`[RepositorySelector] ✓ Nombre confirmado automáticamente: ${dbmlFileName}`);
+      }, 0);
+    }
+  }, [saveState, selectedFile, newFileName, selectedRepo, repositories, sourceInfo?.isNew, setSourceInfo]);
 
   // Limpiar canvas cuando no hay repositorio seleccionado
   useEffect(() => {
@@ -113,9 +178,20 @@ export default function RepositorySelector() {
         
         // Usar repositories directamente para evitar problemas con closures
         const allRepos = repositories?.filter(r => r.enabled) || [];
-        const repo = allRepos.find(r => r.id === selectedRepo);
+        let repo = allRepos.find(r => r.id === selectedRepo);
+        
+        // Si no encuentra el repo en la lista actual, usar el cache
+        if (!repo && currentRepoRef.current) {
+          console.log(`[RepositorySelector] Usando repo en cache: ${currentRepoRef.current.owner}/${currentRepoRef.current.name}`);
+          repo = currentRepoRef.current;
+        }
+        
         if (!repo) {
           console.error(`[RepositorySelector] Repositorio no encontrado: ${selectedRepo}`);
+          Toast.error({
+            content: `Repositorio no encontrado. Por favor, selecciona uno nuevamente.`,
+            duration: 3
+          });
           return;
         }
 
@@ -417,6 +493,7 @@ export default function RepositorySelector() {
       const repo = enabledRepos.find(r => r.id === selectedRepo);
       
       // Guardar información para el commit
+      console.log(`[RepositorySelector] Confirmando nombre para nuevo archivo: ${dbmlFileName}`);
       setSourceInfo({
         repoId: selectedRepo,
         filePath: dbmlFileName,
@@ -426,16 +503,11 @@ export default function RepositorySelector() {
         isNew: true
       });
       
-      // Limpiar el canvas completamente para nuevo esquema
-      setTables([]);
-      setRelationships([]);
-      setAreas([]);
-      setNotes([]);
-      setEnums([]);
-      setTypes([]);
+      // NO limpiar canvas aquí - ya fue limpiado cuando se seleccionó "Nuevo"
+      // El usuario ya debería haber dibujado las tablas en el canvas
       
       Toast.success({
-        content: `Nuevo diagrama preparado. Se guardará como ${dbmlFileName} cuando sincronices.`,
+        content: `Nuevo diagrama preparado: ${dbmlFileName}. Ahora puedes dibujar las tablas y guardar.`,
         duration: 3
       });
       return;
@@ -634,27 +706,29 @@ export default function RepositorySelector() {
           
           {/* Input de nombre - Visible SOLO cuando selectedFile === 'NEW' */}
           {selectedFile === 'NEW' && (
-            <input
-              type="text"
-              placeholder="nombre_archivo"
-              value={newFileName}
-              onChange={(e) => setNewFileName(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && newFileName.trim()) {
-                  handleImport();
-                }
-              }}
-              title="Ingresa el nombre sin extensión"
-              style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '2px solid #ffd700',
-                fontSize: '12px',
-                minWidth: '140px',
-                flex: '0 1 auto',
-                backgroundColor: '#fffacd'
-              }}
-            />
+            <>
+              <input
+                type="text"
+                placeholder="nombre_archivo"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newFileName.trim()) {
+                    handleImport();
+                  }
+                }}
+                title="Ingresa el nombre sin extensión"
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: '2px solid #ffd700',
+                  fontSize: '12px',
+                  minWidth: '140px',
+                  flex: '0 1 auto',
+                  backgroundColor: '#fffacd'
+                }}
+              />
+            </>
           )}
           
           {/* Input manual - Eliminado */}
