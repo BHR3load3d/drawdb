@@ -1,22 +1,27 @@
-/**
- * Repository Selector Component
- * 
- * Componente para seleccionar un repositorio e importar DBML
- * desde la barra de herramientas del editor
- */
-
 import React, { useState, useEffect } from 'react';
 import { Select, Spin, Toast } from '@douyinfe/semi-ui';
 import repositoryManagementService from '../services/repositoryManagement';
 import dbmlImportService from '../services/dbmlImport';
 import { useDBMLImport } from '../hooks/useDBMLImport';
 import { useTranslation } from 'react-i18next';
-import { useDiagram } from '../hooks';
+import { 
+  useDiagram,
+  useTransform,
+  useAreas,
+  useNotes,
+  useEnums,
+  useTypes
+} from '../hooks';
 
 export default function RepositorySelector() {
   const { t } = useTranslation();
   const { importDBML, findDBMLFiles } = useDBMLImport();
   const { setTables, setRelationships, setSourceInfo } = useDiagram();
+  const { setTransform } = useTransform();
+  const { setAreas } = useAreas();
+  const { setNotes } = useNotes();
+  const { setEnums } = useEnums();
+  const { setTypes } = useTypes();
   
   const [repositories, setRepositories] = useState(
     repositoryManagementService.getAllRepositories()
@@ -117,6 +122,47 @@ export default function RepositorySelector() {
     setSelectedFile(filePath);
   };
 
+  /**
+   * Mergea las propiedades de posición del config con las tablas del DBML
+   * @param {Array} dbmlTables - Tablas importadas del DBML
+   * @param {Array} configTables - Tablas del config JSON con posición
+   * @returns {Array} Tablas mergeadas
+   */
+  const mergeTablesWithConfig = (dbmlTables, configTables) => {
+    if (!Array.isArray(configTables) || configTables.length === 0) {
+      return dbmlTables;
+    }
+
+    console.log(`[RepositorySelector] Mergeando ${dbmlTables.length} tablas DBML con ${configTables.length} tablas del config`);
+    
+    return dbmlTables.map(dbmlTable => {
+      // Buscar tabla correspondiente en el config por ID o nombre
+      const configTable = configTables.find(ct => 
+        ct.id === dbmlTable.id || ct.name === dbmlTable.name
+      );
+
+      if (configTable) {
+        // Mergear propiedades de posición y visualización
+        const mergedTable = {
+          ...dbmlTable,
+          // Aplicar propiedades de posición del config
+          x: configTable.x !== undefined ? configTable.x : dbmlTable.x,
+          y: configTable.y !== undefined ? configTable.y : dbmlTable.y,
+          // Aplicar propiedades visuales si existen
+          ...(configTable.color && { color: configTable.color }),
+          ...(configTable.locked !== undefined && { locked: configTable.locked }),
+          ...(configTable.comment && { comment: configTable.comment })
+        };
+        
+        console.log(`[RepositorySelector]   ✓ Tabla "${dbmlTable.name}": x=${mergedTable.x}, y=${mergedTable.y}`);
+        return mergedTable;
+      } else {
+        console.warn(`[RepositorySelector]   ⚠ Tabla "${dbmlTable.name}" no encontrada en config, mantiene posición por defecto`);
+        return dbmlTable;
+      }
+    });
+  };
+
   const handleImport = async () => {
     // Usar ruta manual si se proporciona, sino usar archivo seleccionado
     const filePathToImport = manualFilePath.trim() || selectedFile;
@@ -176,10 +222,66 @@ export default function RepositorySelector() {
           
           if (config) {
             console.log(`[RepositorySelector] ✓ Configuración cargada del repositorio`);
-            console.log(`  Pan: {x: ${config.pan?.x}, y: ${config.pan?.y}}`);
-            console.log(`  Zoom: ${config.zoom}`);
-            // La aplicación de pan/zoom se hace en el editor al cargar el diagrama
-            // mediante el saveState trigger que restaura desde IndexedDB
+            console.log(`[RepositorySelector] Datos del config:`, {
+              tables: config.tables?.length || 0,
+              pan: config.pan,
+              zoom: config.zoom,
+              areas: config.areas?.length || 0,
+              notes: config.notes?.length || 0,
+              enums: config.enums?.length || 0,
+              types: config.types?.length || 0
+            });
+
+            // IMPORTANTE: Mergear las propiedades de posición del config con las tablas del DBML
+            const tablesWithConfig = mergeTablesWithConfig(diagram.tables || [], config.tables || []);
+            
+            console.log(`[RepositorySelector] Aplicando configuración del repositorio...`);
+            
+            // Actualizar tablas con propiedades del config
+            setTables(tablesWithConfig);
+            
+            // Aplicar pan y zoom si están disponibles
+            if (config.pan || typeof config.zoom === 'number') {
+              const transformUpdate = {};
+              
+              if (config.pan) {
+                console.log(`[RepositorySelector]   Pan: {x: ${config.pan.x}, y: ${config.pan.y}}`);
+                transformUpdate.pan = config.pan;
+              }
+              
+              if (typeof config.zoom === 'number') {
+                console.log(`[RepositorySelector]   Zoom: ${config.zoom}`);
+                transformUpdate.zoom = config.zoom;
+              }
+              
+              setTransform(transformUpdate);
+            }
+            
+            // Aplicar áreas si existen
+            if (Array.isArray(config.areas) && config.areas.length > 0) {
+              console.log(`[RepositorySelector]   Áreas: ${config.areas.length}`);
+              setAreas(config.areas);
+            }
+            
+            // Aplicar notas si existen
+            if (Array.isArray(config.notes) && config.notes.length > 0) {
+              console.log(`[RepositorySelector]   Notas: ${config.notes.length}`);
+              setNotes(config.notes);
+            }
+            
+            // Aplicar enums si existen
+            if (Array.isArray(config.enums) && config.enums.length > 0) {
+              console.log(`[RepositorySelector]   Enums: ${config.enums.length}`);
+              setEnums(config.enums);
+            }
+            
+            // Aplicar tipos si existen
+            if (Array.isArray(config.types) && config.types.length > 0) {
+              console.log(`[RepositorySelector]   Tipos: ${config.types.length}`);
+              setTypes(config.types);
+            }
+            
+            console.log(`[RepositorySelector] ✓ Configuración aplicada completamente`);
           } else {
             console.log(`[RepositorySelector] No hay configuración guardada en el repositorio`);
           }

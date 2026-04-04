@@ -166,22 +166,34 @@ class GitHubCommitService {
    * @param {string} filePath - Ruta del archivo
    * @param {string} branch - Rama del repo
    * @param {string} token - Token de GitHub
-   * @returns {Promise<Object>} {sha, exists}
+   * @returns {Promise<Object>} {sha, exists, source}
    */
   async getFileInfo(owner, repo, filePath, branch, token) {
     try {
-      // Agregar ref=branch como parámetro query
-      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
-      
       console.log(`[getFileInfo] Buscando archivo: ${filePath} en rama ${branch}`);
-      console.log(`[getFileInfo] URL: ${url}`);
-      console.log(`[getFileInfo] Token disponible: ${!!token}`);
       
-      const response = await fetch(url, {
+      // ESTRATEGIA: Intentar Git API PRIMERO (más confiable post-cambios)
+      // Luego fallback a Contents API si es necesario
+      
+      console.log(`[getFileInfo] [Intento 1] Usando Git API (más confiable después de cambios)...`);
+      const gitApiResult = await this.getSHAFromGitAPI(owner, repo, filePath, branch, token);
+      
+      if (gitApiResult?.sha) {
+        console.log(`[getFileInfo] ✓ SHA encontrado vía Git API: ${gitApiResult.sha.substring(0, 8)}...`);
+        return { sha: gitApiResult.sha, exists: true, source: 'git-api' };
+      }
+      
+      // Si Git API no encuentra el archivo, intentar Contents API
+      console.log(`[getFileInfo] [Intento 2] Git API no encontró archivo, intentando Contents API...`);
+      
+      const contentsUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+      console.log(`[getFileInfo] URL Contents: ${contentsUrl}`);
+      
+      const response = await fetch(contentsUrl, {
         method: 'GET',
         headers: {
           'Authorization': `token ${token}`,
-          'Accept': 'application/json',  // Genérico en lugar de vnd.github.v3+json
+          'Accept': 'application/json',
           'User-Agent': 'DrawDB'
         }
       });
@@ -204,78 +216,22 @@ class GitHubCommitService {
           if (!contentType.includes('application/json') && responseText.startsWith('{')) {
             console.log(`[getFileInfo] Content-Type no es JSON pero el body parece serlo, intentando parsear`);
           } else if (!contentType.includes('application/json')) {
-            console.error(`[getFileInfo] GitHub devolvió ${contentType} en lugar de JSON`);
-            console.warn(`[getFileInfo] Intentando request alternativa para obtener metadatos...`);
-            
-            // GitHub está devolviendo RAW, hacer una request alternativa para obtener JSON
-            // Intentar sin el Accept header que causa RAW, o cambiar a uno diferente
-            try {
-              const metaUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(filePath)}?ref=${encodeURIComponent(branch)}`;
-              console.log(`[getFileInfo] Haciendo request alternativa...`);
-              
-              const metaResponse = await fetch(metaUrl, {
-                method: 'GET',
-                headers: {
-                  'Authorization': `token ${token}`,
-                  'Accept': 'application/json',
-                  'User-Agent': 'DrawDB'
-                }
-              });
-
-              if (metaResponse.ok) {
-                const metaText = await metaResponse.text();
-                const metaData = JSON.parse(metaText);
-                if (metaData.sha) {
-                  console.log(`[getFileInfo] SHA obtenido de request alternativa: ${metaData.sha.substring(0, 8)}...`);
-                  return { sha: metaData.sha, exists: true };
-                }
-              }
-              
-              // Si tampoco funciona la request alternativa, intentar obtener SHA del Git API
-              console.warn(`[getFileInfo] Request alternativa falló, intentando Git API...`);
-              try {
-                const gitResult = await this.getSHAFromGitAPI(owner, repo, filePath, branch, token);
-                if (gitResult?.sha) {
-                  console.log(`[getFileInfo] SHA obtenido del Git API: ${gitResult.sha.substring(0, 8)}...`);
-                  return { sha: gitResult.sha, exists: true, source: 'git-api' };
-                }
-              } catch (gitError) {
-                console.error(`[getFileInfo] Error obteniendo SHA del Git API: ${gitError.message}`);
-              }
-              
-              // Si todo falló, reportar como archivo nuevo
-              console.warn(`[getFileInfo] No se pudo obtener SHA confiable de ninguna fuente, reportando como archivo nuevo`);
-              return { exists: false };
-            } catch (error) {
-              console.error(`[getFileInfo] Error en request alternativa: ${error.message}`);
-              
-              // Intentar Git API como último recurso
-              try {
-                const gitResult = await this.getSHAFromGitAPI(owner, repo, filePath, branch, token);
-                if (gitResult?.sha) {
-                  console.log(`[getFileInfo] SHA obtenido del Git API (a través de catch): ${gitResult.sha.substring(0, 8)}...`);
-                  return { sha: gitResult.sha, exists: true, source: 'git-api' };
-                }
-              } catch (gitError) {
-                console.error(`[getFileInfo] Error obteniendo SHA del Git API: ${gitError.message}`);
-              }
-              
-              return { exists: false };
-            }
+            // GitHub devolvió RAW en lugar de JSON
+            console.error(`[getFileInfo] GitHub devolvió ${contentType} en lugar de JSON (RAW)`);
+            // Archivo existe pero no podemos obtener metadatos
+            return { exists: true, sha: null, source: 'raw-detected' };
           }
           
           data = JSON.parse(responseText);
         } catch (parseError) {
           console.error('[getFileInfo] Error parseando respuesta JSON:', parseError.message);
-          console.error('[getFileInfo] Response text preview:', responseText.substring(0, 300));
-          // Si no podemos parsear, asumir que el archivo NO existe para poder crearlo
-          console.warn('[getFileInfo] No se pudo parsear respuesta, asumiendo archivo no existe');
           return { exists: false };
         }
-        console.log(`[getFileInfo] Archivo encontrado. SHA: ${data.sha?.substring(0, 8)}...`);
-        return { sha: data.sha, exists: true };
+        
+        console.log(`[getFileInfo] ✓ Archivo encontrado. SHA: ${data.sha?.substring(0, 8)}...`);
+        return { sha: data.sha, exists: true, source: 'contents-api' };
       } else if (response.status === 404) {
-        console.log(`[getFileInfo] Archivo no existe en rama ${branch}, será creado`);
+        console.log(`[getFileInfo] Archivo no existe en rama ${branch}`);
         return { exists: false };
       } else {
         let errorMessage = response.statusText;
@@ -285,7 +241,6 @@ class GitHubCommitService {
             const error = JSON.parse(responseText);
             errorMessage = error.message || response.statusText;
           } catch {
-            // Si no es JSON, usar el texto directamente
             errorMessage = responseText.substring(0, 100);
           }
         }
@@ -307,10 +262,12 @@ class GitHubCommitService {
    * @param {string} options.content - Contenido del archivo
    * @param {string} options.message - Mensaje de commit
    * @param {string} options.token - Token de GitHub
+   * @param {string} [options.knownSha] - SHA conocido del archivo (si se tiene, evita otra búsqueda)
+   * @param {boolean} [options.fileExists] - Si se sabe que el archivo existe (usado si knownSha se proporciona)
    * @returns {Promise<Object>} Respuesta del commit
    */
   async commitFile(options) {
-    const { owner, repo, filePath, branch, content, message, token } = options;
+    const { owner, repo, filePath, branch, content, message, token, knownSha, fileExists } = options;
 
     try {
       console.log(`[commitFile] Preparando commit...`);
@@ -319,7 +276,19 @@ class GitHubCommitService {
       console.log(`  Archivo: ${filePath}`);
 
       // Obtener SHA del archivo actual (si existe)
-      const fileInfo = await this.getFileInfo(owner, repo, filePath, branch, token);
+      // Si se proporciona knownSha, usarlo directamente (evita delay de obtener SHA nuevamente)
+      let fileInfo;
+      if (knownSha) {
+        console.log(`[commitFile] Usando SHA proporcionado: ${knownSha.substring(0, 8)}...`);
+        fileInfo = { 
+          exists: fileExists !== undefined ? fileExists : true, 
+          sha: knownSha,
+          source: 'known'
+        };
+      } else {
+        console.log(`[commitFile] Obteniendo SHA del archivo...`);
+        fileInfo = await this.getFileInfo(owner, repo, filePath, branch, token);
+      }
       
       // Encodificar contenido a base64 (compatible con UTF-8)
       let encodedContent;
@@ -403,28 +372,47 @@ class GitHubCommitService {
         if (response.status === 409) {
           // Conflict - el SHA no coincide o el archivo ya existe
           console.error('[commitFile] Error 409: Conflicto al actualizar archivo');
-          console.error('[commitFile] El SHA está desactualizado. Obteniendo SHA actual y reintentando...');
+          console.error('[commitFile] SHA enviado no coincide con el actual en GitHub');
+          console.error('[commitFile] Intentando obtener SHA actual y reintentar automáticamente...');
+          
+          let retrySucceeded = false;
+          const retryUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
           
           try {
-            // Intentar obtener el SHA actual directamente de GitHub API (no usar Git API que puede estar desactualizada)
-            console.log('[commitFile] Obteniendo SHA actual del archivo...');
-            const freshUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+            // Intentar obtener el SHA actual directamente de GitHub API
+            console.log('[commitFile] [REINTENTO #1] Obteniendo SHA actual del archivo...');
+            const freshUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`;
+            
             const freshResponse = await fetch(freshUrl, {
               method: 'GET',
               headers: {
                 'Authorization': `token ${token}`,
-                'Accept': 'application/vnd.github.v3+json',
+                'Accept': 'application/json',  // Genérico para evitar RAW
                 'User-Agent': 'DrawDB'
               }
             });
 
             if (freshResponse.ok) {
-              const freshText = await freshResponse.text();
-              const freshData = JSON.parse(freshText);
+              let freshData;
+              try {
+                const freshText = await freshResponse.text();
+                const contentType = freshResponse.headers.get('content-type') || '';
+                
+                if (!contentType.includes('application/json')) {
+                  console.warn(`[commitFile] GET devolvió ${contentType}, no JSON`);
+                  // Si es RAW, no podemos extraer el SHA de esta forma
+                  throw new Error('GitHub devolvió contenido RAW en lugar de metadatos JSON');
+                }
+                
+                freshData = JSON.parse(freshText);
+              } catch (parseErr) {
+                console.error(`[commitFile] No se pudo parsear respuesta GET para SHA:`, parseErr.message);
+                throw parseErr;
+              }
               
               if (freshData.sha) {
                 console.log(`[commitFile] ✓ SHA actual obtenido: ${freshData.sha.substring(0, 8)}...`);
-                console.log(`[commitFile] Reintentando commit con SHA actualizado...`);
+                console.log(`[commitFile] [REINTENTO #1] Reintentando commit con SHA actualizado...`);
                 
                 // Reintentar con el nuevo SHA
                 const retryData = {
@@ -434,7 +422,7 @@ class GitHubCommitService {
                   sha: freshData.sha  // SHA actualizado
                 };
 
-                const retryResponse = await fetch(freshUrl, {
+                const retryResponse = await fetch(retryUrl, {
                   method: 'PUT',
                   headers: {
                     'Authorization': `token ${token}`,
@@ -446,34 +434,105 @@ class GitHubCommitService {
                 });
 
                 if (retryResponse.ok) {
-                  console.log(`[commitFile] ✓ Reintento exitoso tras 409`);
+                  console.log(`[commitFile] ✓✓ [REINTENTO #1] Commit exitoso tras resolver conflicto`);
                   const retryText = await retryResponse.text();
                   const retryResult = JSON.parse(retryText);
+                  retrySucceeded = true;
                   
                   return {
                     success: true,
                     sha: retryResult.commit?.sha || freshData.sha,
                     url: retryResult.commit?.html_url || 'unknown',
-                    message: 'Reintento exitoso después de conflicto'
+                    message: 'Reintento exitoso después de conflicto 409'
                   };
-                } else {
-                  console.error(`[commitFile] Reintento falló con status ${retryResponse.status}`);
-                  const retryText = await retryResponse.text();
+                } else if (retryResponse.status === 409) {
+                  // La rama se actualizó de nuevo, intentar una segunda vez
+                  console.error(`[commitFile] [REINTENTO #1] Falló nuevamente con 409`);
+                  console.error(`[commitFile] [REINTENTO #2] Esperando 1.5s y reintentando una vez más...`);
+                  
+                  // Esperar más tiempo y obtener SHA una vez más
+                  await new Promise(resolve => setTimeout(resolve, 1500));
+                  
                   try {
-                    const retryError = JSON.parse(retryText);
-                    throw new Error(retryError.message || retryText);
-                  } catch {
-                    throw new Error(retryText);
+                    const finalResponse = await fetch(freshUrl, {
+                      method: 'GET',
+                      headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/json',
+                        'User-Agent': 'DrawDB'
+                      }
+                    });
+
+                    if (finalResponse.ok) {
+                      const finalText = await finalResponse.text();
+                      const finalData = JSON.parse(finalText);
+                      
+                      if (finalData.sha) {
+                        console.log(`[commitFile] ✓ SHA para segundo reintento: ${finalData.sha.substring(0, 8)}...`);
+                        
+                        const finalRetry = {
+                          message,
+                          content: encodedContent,
+                          branch,
+                          sha: finalData.sha
+                        };
+
+                        const finalPutResponse = await fetch(retryUrl, {
+                          method: 'PUT',
+                          headers: {
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json',
+                            'User-Agent': 'DrawDB',
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify(finalRetry)
+                        });
+
+                        if (finalPutResponse.ok) {
+                          console.log(`[commitFile] ✓✓✓ [REINTENTO #2] Commit exitoso`);
+                          const finalText2 = await finalPutResponse.text();
+                          const finalResult = JSON.parse(finalText2);
+                          retrySucceeded = true;
+                          
+                          return {
+                            success: true,
+                            sha: finalResult.commit?.sha || finalData.sha,
+                            url: finalResult.commit?.html_url || 'unknown',
+                            message: 'Commit exitoso en segundo reintento (después de 409)'
+                          };
+                        }
+                      }
+                    }
+                  } catch (finalError) {
+                    console.error(`[commitFile] [REINTENTO #2] Error:`, finalError.message);
                   }
+                } else {
+                  console.error(`[commitFile] [REINTENTO #1] Falló con status ${retryResponse.status}`);
+                  const retryText = await retryResponse.text();
+                  console.error(`[commitFile] Respuesta reintento:`, retryText.substring(0, 200));
                 }
+              } else {
+                console.warn(`[commitFile] GET devolvió 200 pero sin SHA:`, JSON.stringify(freshData).substring(0, 100));
               }
+            } else {
+              console.warn(`[commitFile] GET para SHA fresco devolvió ${freshResponse.status}`);
+              const freshText = await freshResponse.text();
+              console.warn(`[commitFile] Respuesta GET:`, freshText.substring(0, 200));
             }
           } catch (retryError) {
-            console.error(`[commitFile] No se pudo resolver el conflicto: ${retryError.message}`);
+            console.error(`[commitFile] [REINTENTO #1] Error intentando obtener SHA fresco:`, retryError.message);
+            console.error('[commitFile] Continuando con estrategia alternativa...');
           }
           
-          // Si el reintento falló, lanzar el error original
-          throw new Error(`Conflicto en GitHub (409): ${errorMessage}. Intenta recargar la página y vuelve a intentar.`);
+          // Si el reintento automático falló, lanzar el error original
+          if (!retrySucceeded) {
+            console.error('[commitFile] ✗ No se pudo resolver el conflicto 409 automáticamente');
+            console.error('[commitFile] Posibles causas:');
+            console.error('[commitFile]   1. El archivo fue modificado por otro proceso');
+            console.error('[commitFile]   2. GitHub rechaza por política de protección de rama');
+            console.error('[commitFile]   3. El token no tiene permisos suficientes');
+            throw new Error(`Conflicto en GitHub (409): ${errorMessage}. No se pudo resolver automáticamente. Intenta recargar la página.`);
+          }
         } else if (response.status === 422) {
           // Unprocessable Entity - típicamente falta el SHA o es inválido
           console.error('[commitFile] Error 422: Parámetros inválidos');
@@ -582,7 +641,9 @@ class GitHubCommitService {
         throw new Error('Diagrama no fue importado desde un repositorio. Primero importa un DBML desde GitHub.');
       }
 
-      console.log(`[saveDiagramToRepo] Guardando diagrama y configuración a repositorio...`);
+      console.log(`\n${'='.repeat(70)}`);
+      console.log(`[saveDiagramToRepo] INICIANDO GUARDADO A REPOSITORIO`);
+      console.log(`${'='.repeat(70)}`);
       console.log(`[saveDiagramToRepo] sourceInfo:`, {
         repoId: sourceInfo.repoId,
         filePath: sourceInfo.filePath,
@@ -592,23 +653,23 @@ class GitHubCommitService {
       });
       
       // Convertir diagrama a DBML
-      console.log(`[saveDiagramToRepo] Convirtiendo diagrama a DBML...`);
+      console.log(`\n[saveDiagramToRepo] Paso 1: Convirtiendo diagrama a DBML...`);
       let dbmlContent;
       try {
         dbmlContent = toDBML(diagram);
-        console.log(`[saveDiagramToRepo] DBML generado. Tamaño: ${dbmlContent.length} bytes`);
+        console.log(`[saveDiagramToRepo] ✓ DBML generado. Tamaño: ${dbmlContent.length} bytes`);
         
         // Validar que es string válido
         if (typeof dbmlContent !== 'string' || dbmlContent.length === 0) {
           throw new Error(`DBML generado no válido: tipo=${typeof dbmlContent}, longitud=${dbmlContent?.length}`);
         }
       } catch (error) {
-        console.error(`[saveDiagramToRepo] Error generando DBML:`, error.message);
+        console.error(`[saveDiagramToRepo] ✗ Error generando DBML:`, error.message);
         throw error;
       }
       
       // Guardar DBML
-      console.log(`[saveDiagramToRepo] Guardando DBML a ${sourceInfo.filePath}...`);
+      console.log(`\n[saveDiagramToRepo] Paso 2: Guardando DBML a ${sourceInfo.filePath}...`);
       let result;
       try {
         result = await this.commitFile({
@@ -620,19 +681,22 @@ class GitHubCommitService {
           message: `[DrawDB] Updated diagram - ${new Date().toLocaleString()}`,
           token
         });
-        console.log(`[saveDiagramToRepo] ✓ DBML guardado`);
+        console.log(`[saveDiagramToRepo] ✓ DBML guardado exitosamente`);
       } catch (error) {
         console.error(`[saveDiagramToRepo] ✗ Error guardando DBML:`, error.message);
         throw error;
       }
 
-      // Pequeño delay para evitar rate limiting de GitHub
-      console.log(`[saveDiagramToRepo] Esperando antes de guardar configuración...`);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Pequeño delay para que GitHub actualice sus índices
+      // IMPORTANTE: 2 segundos da tiempo suficiente para que la rama se actualice en AMBAS APIs (Contents API y Git API)
+      console.log(`\n[saveDiagramToRepo] Esperando 2000ms para que GitHub actualice sus índices...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Guardar configuración
-      console.log(`[saveDiagramToRepo] Guardando configuración...`);
+      console.log(`\n[saveDiagramToRepo] Paso 3: Guardando configuración...`);
+
       const configFileName = sourceInfo.filePath.replace('.dbml', '') + '_config.json';
+      console.log(`[saveDiagramToRepo] Archivo config: ${configFileName}`);
       
       // Sanitizar la configuración para asegurar que es JSON-serializable
       const cleanConfig = {
@@ -651,13 +715,17 @@ class GitHubCommitService {
       let configContent;
       try {
         configContent = JSON.stringify(cleanConfig, null, 2);
-        console.log(`[saveDiagramToRepo] Configuración serializada. Tamaño: ${configContent.length} bytes`);
+        console.log(`[saveDiagramToRepo] ✓ Configuración serializada. Tamaño: ${configContent.length} bytes`);
       } catch (error) {
-        console.error(`[saveDiagramToRepo] Error serializando config:`, error.message);
+        console.error(`[saveDiagramToRepo] ✗ Error serializando config:`, error.message);
         throw error;
       }
       
       try {
+        // Para el config file, simplemente dejar que commitFile lo obtenga de manera más confiable
+        // No pasar knownSha porque podría estar desactualizado
+        console.log(`[saveDiagramToRepo] Committeando config file (GitHub obtendrá SHA automáticamente)...`);
+        
         await this.commitFile({
           owner: sourceInfo.owner,
           repo: sourceInfo.repo,
@@ -667,16 +735,20 @@ class GitHubCommitService {
           message: `[DrawDB] Updated diagram config - ${new Date().toLocaleString()}`,
           token
         });
-        console.log(`[saveDiagramToRepo] ✓ Configuración guardada`);
+        console.log(`[saveDiagramToRepo] ✓ Configuración guardada exitosamente`);
       } catch (error) {
         console.error(`[saveDiagramToRepo] ✗ Error guardando configuración:`, error.message);
         throw error;
       }
 
-      console.log(`[saveDiagramToRepo] ✓ Diagrama y configuración guardados exitosamente`);
+      console.log(`\n${'='.repeat(70)}`);
+      console.log(`[saveDiagramToRepo] ✓✓ Diagrama y configuración guardados exitosamente`);
+      console.log(`${'='.repeat(70)}\n`);
       return result;
     } catch (error) {
+      console.error(`\n${'='.repeat(70)}`);
       console.error(`[saveDiagramToRepo] ✗ Error final:`, error.message);
+      console.error(`${'='.repeat(70)}\n`);
       throw error;
     }
   }
