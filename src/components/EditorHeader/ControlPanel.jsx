@@ -120,6 +120,7 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
     updateRelationship,
     database,
     sourceInfo,
+    setSourceInfo,
   } = useDiagram();
   const { enums, setEnums, deleteEnum, addEnum, updateEnum } = useEnums();
   const { types, addType, deleteType, updateType, setTypes } = useTypes();
@@ -754,7 +755,15 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
   const toggleDBMLEditor = () => {
     setLayout((prev) => ({ ...prev, dbmlEditor: !prev.dbmlEditor }));
   };
-  const save = () => setSaveState(State.SAVING);
+  const save = () => {
+    // Si hay sourceInfo (diagrama vinculado a repositorio), sincronizar también
+    if (sourceInfo) {
+      handleSaveToRepository();
+    } else {
+      // Si no, solo guardar localmente
+      setSaveState(State.SAVING);
+    }
+  };
   const handleSaveToRepository = async () => {
     const token = import.meta.env.VITE_GITHUB_TOKEN || '';
     const diagram = { tables, relationships, enums, types, notes, areas, database };
@@ -773,7 +782,11 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
       types
     };
     
-    await saveToRepository(diagram, diagramConfig, sourceInfo, token);
+    // Primero guardar localmente en IndexedDB
+    setSaveState(State.SAVING);
+    
+    // Luego sincronizar con el repositorio
+    await saveToRepository(diagram, diagramConfig, sourceInfo, token, setSourceInfo);
   };
   const recentlyOpenedDiagrams = useLiveQuery(() =>
     db.diagrams.orderBy("lastModified").reverse().limit(10).toArray(),

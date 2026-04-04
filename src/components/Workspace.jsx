@@ -68,6 +68,7 @@ export default function WorkSpace() {
     setRelationships,
     database,
     setDatabase,
+    shouldAutoLoadDiagram,
   } = useDiagram();
   const { undoStack, redoStack, setUndoStack, setRedoStack } = useUndoRedo();
   const { t, i18n } = useTranslation();
@@ -385,7 +386,10 @@ export default function WorkSpace() {
     }
 
     if (!loadedDiagramId) {
-      await loadLatestDiagram();
+      // Solo cargar el diagrama más reciente si shouldAutoLoadDiagram está activado
+      if (shouldAutoLoadDiagram) {
+        await loadLatestDiagram();
+      }
       return;
     }
 
@@ -417,6 +421,7 @@ export default function WorkSpace() {
     isDiagram,
     isTemplate,
     loadedDiagramId,
+    shouldAutoLoadDiagram,
   ]);
 
   const returnToCurrentDiagram = async () => {

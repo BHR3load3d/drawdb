@@ -13,6 +13,7 @@ export default function DiagramContextProvider({ children }) {
   const [tables, setTables] = useState([]);
   const [relationships, setRelationships] = useState([]);
   const [sourceInfo, setSourceInfo] = useState(null); // {repoId, filePath, owner, repo, branch}
+  const [shouldAutoLoadDiagram, setShouldAutoLoadDiagram] = useState(false); // Controla si Workspace debe cargar automáticamente el diagrama
   const { transform } = useTransform();
   const { setUndoStack, setRedoStack } = useUndoRedo();
   const { selectedElement, setSelectedElement } = useSelect();
@@ -249,6 +250,8 @@ export default function DiagramContextProvider({ children }) {
         setDatabase,
         sourceInfo,
         setSourceInfo,
+        shouldAutoLoadDiagram,
+        setShouldAutoLoadDiagram,
         tablesCount: tables.length,
         relationshipsCount: relationships.length,
       }}

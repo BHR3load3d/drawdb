@@ -3,85 +3,21 @@
   "lastUpdated": "2026-04-02T00:00:00Z",
   "description": "Configuración centralizada de repositorios de GitHub para DrawDB. Almacena datos de repos para sincronización, integración y exportación de diagramas.",
   
-  "repositories": [
+  "repositories": [   
     {
-      "id": "repo-001",
-      "name": "drawdb-main",
-      "owner": "drawdb-io",
-      "url": "https://github.com/drawdb-io/drawdb",
-      "description": "Repositorio principal de DrawDB",
-      "type": "public",
-      "enabled": true,
-      "branch": "main",
-      "defaultBranch": "main",
-      "topics": ["database", "diagram", "erd", "sql", "visualization"],
-      
-      "api": {
-        "endpoint": "https://api.github.com/repos/drawdb-io/drawdb",
-        "rate_limit": 60,
-        "rate_limit_reset": 3600
-      },
-      
-      "directories": {
-        "schemas": "src/data/schemas.js",
-        "templates": "src/templates/",
-        "exports": "exports/",
-        "imports": "imports/"
-      },
-      
-      "integrations": {
-        "gists": {
-          "enabled": true,
-          "prefix": "drawdb-",
-          "description": "DrawDB Diagram"
-        },
-        "issues": {
-          "enabled": true,
-          "labels": ["bug", "feature", "enhancement", "documentation"]
-        },
-        "discussions": {
-          "enabled": true,
-          "category": "General"
-        }
-      },
-      
-      "sync": {
-        "enabled": true,
-        "frequency": "hourly",
-        "lastSync": "2026-04-02T12:00:00Z",
-        "autoCommit": true,
-        "commitMessage": "[DrawDB Auto-Sync] Database diagram update"
-      },
-      
-      "authentication": {
-        "type": "token",
-        "tokenEnvVar": "GITHUB_TOKEN",
-        "scopes": ["repo", "gist", "user:email"],
-        "expiresAt": "2027-04-02T00:00:00Z"
-      },
-      
-      "storage": {
-        "format": "json",
-        "compression": "none",
-        "encryption": false,
-        "maxFileSize": 10485760
-      }
-    },
-    
-    {
-      "id": "repo-002",
-      "name": "drawdb-server",
-      "owner": "drawdb-io",
-      "url": "https://github.com/drawdb-io/drawdb-server",
+      "id": "1200005356",
+      "name": "prueba_dbml",
+      "owner": "BHR3load3d",
+      "url": "https://github.com/BHR3load3d/prueba_dbml",
       "description": "Servidor backend para DrawDB (compartir diagramas)",
       "type": "public",
       "enabled": true,
-      "branch": "main",
-      "defaultBranch": "main",
+      "branch": "Master",
+      "defaultBranch": "Master",
       "topics": ["server", "api", "backend", "nodejs", "express"],
       
       "api": {
-        "endpoint": "https://api.github.com/repos/drawdb-io/drawdb-server",
+        "endpoint": "https://api.github.com/repos/BHR3load3d/prueba_dbml",
         "rate_limit": 60,
         "rate_limit_reset": 3600
       },
