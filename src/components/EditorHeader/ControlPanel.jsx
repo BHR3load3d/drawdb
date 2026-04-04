@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect } from "react";
 import {
   IconCaretdown,
   IconChevronRight,
@@ -136,6 +136,16 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
   
   // Hook para guardar al repositorio
   const { saveToRepository, isSaving } = useSaveToGitHub();
+
+  // Actualizar título cuando se carga un archivo desde el repositorio
+  useEffect(() => {
+    if (sourceInfo && sourceInfo.filePath) {
+      // Extraer el nombre del archivo sin la extensión .dbml
+      const fileName = sourceInfo.filePath.replace(/\.dbml$/, '');
+      setTitle(fileName);
+      console.log(`[ControlPanel] Título actualizado a: ${fileName}`);
+    }
+  }, [sourceInfo?.filePath, setTitle]);
 
   const invertLayout = (component) =>
     setLayout((prev) => ({ ...prev, [component]: !prev[component] }));
