@@ -159,16 +159,45 @@ export default function RepositorySelector() {
           branch: repo?.branch
         });
         
+        // Intentar cargar la configuración del repositorio
+        try {
+          const configFileName = filePathToImport.replace('.dbml', '') + '_config.json';
+          console.log(`[RepositorySelector] Buscando configuración: ${configFileName}`);
+          
+          const config = await dbmlImportService.loadDiagramConfig(
+            configFileName,
+            {
+              owner: repo?.owner,
+              repo: repo?.name,
+              branch: repo?.branch
+            },
+            import.meta.env.VITE_GITHUB_TOKEN || ''
+          );
+          
+          if (config) {
+            console.log(`[RepositorySelector] ✓ Configuración cargada del repositorio`);
+            console.log(`  Pan: {x: ${config.pan?.x}, y: ${config.pan?.y}}`);
+            console.log(`  Zoom: ${config.zoom}`);
+            // La aplicación de pan/zoom se hace en el editor al cargar el diagrama
+            // mediante el saveState trigger que restaura desde IndexedDB
+          } else {
+            console.log(`[RepositorySelector] No hay configuración guardada en el repositorio`);
+          }
+        } catch (error) {
+          console.warn(`[RepositorySelector] Error cargando configuración:`, error.message);
+          // Continuar incluso si no hay configuración
+        }
+        
         Toast.success({
           content: t('dbml_imported_successfully'),
           duration: 3
         });
         
-        // Limpiar selección
-        setSelectedRepo(null);
-        setSelectedFile(null);
-        setDbmlFiles([]);
-        setManualFilePath('');
+        // No limpiar selección para que el usuario vea qué archivo acaba de importar
+        // setSelectedRepo(null);
+        // setSelectedFile(null);  ← Comentado: preservar selección
+        // setDbmlFiles([]);
+        // setManualFilePath('');
       }
     } catch (error) {
       console.error(`[RepositorySelector] ✗ ERROR IMPORTANDO:`, error);

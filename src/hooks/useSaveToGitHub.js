@@ -10,7 +10,7 @@ import { toDBML } from '../utils/exportAs/dbml';
 export function useSaveToGitHub() {
   const [isSaving, setIsSaving] = useState(false);
 
-  const saveToRepository = async (diagram, sourceInfo, token) => {
+  const saveToRepository = async (diagram, diagramConfig, sourceInfo, token) => {
     if (!sourceInfo || !sourceInfo.repoId) {
       Toast.error({
         content: 'Este diagrama no fue importado desde un repositorio. Primero importa un DBML desde GitHub.',
@@ -25,6 +25,7 @@ export function useSaveToGitHub() {
       
       const result = await githubCommitService.saveDiagramToRepo(
         diagram,
+        diagramConfig,
         sourceInfo,
         token
       );

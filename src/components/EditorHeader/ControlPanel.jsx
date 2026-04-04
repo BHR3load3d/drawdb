@@ -758,7 +758,22 @@ export default function ControlPanel({ title, setTitle, lastSaved }) {
   const handleSaveToRepository = async () => {
     const token = import.meta.env.VITE_GITHUB_TOKEN || '';
     const diagram = { tables, relationships, enums, types, notes, areas, database };
-    await saveToRepository(diagram, sourceInfo, token);
+    
+    // Preparar la configuración completa del diagrama desde IndexedDB
+    const diagramConfig = {
+      database,
+      name: title,
+      tables,
+      relationships,
+      notes,
+      areas,
+      pan: transform.pan,
+      zoom: transform.zoom,
+      enums,
+      types
+    };
+    
+    await saveToRepository(diagram, diagramConfig, sourceInfo, token);
   };
   const recentlyOpenedDiagrams = useLiveQuery(() =>
     db.diagrams.orderBy("lastModified").reverse().limit(10).toArray(),

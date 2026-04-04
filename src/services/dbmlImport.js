@@ -604,6 +604,44 @@ class DBMLImportService {
   }
 
   /**
+   * Descarga la configuración del diagrama desde el repositorio
+   * @param {string} configFileName - Nombre del archivo config (ej: prueba_config.json)
+   * @param {Object} sourceInfo - {owner, repo, branch}
+   * @param {string} token - Token de GitHub
+   * @returns {Promise<Object|null>} Configuración del diagrama o null si no existe
+   */
+  async loadDiagramConfig(configFileName, sourceInfo, token) {
+    try {
+      const url = `https://api.github.com/repos/${sourceInfo.owner}/${sourceInfo.repo}/contents/${configFileName}`;
+      
+      console.log(`[loadDiagramConfig] Cargando: ${configFileName}`);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3.raw',
+          'User-Agent': 'DrawDB'
+        }
+      });
+
+      if (response.ok) {
+        const content = await response.text();
+        const config = JSON.parse(content);
+        console.log(`[loadDiagramConfig] ✓ Configuración cargada`);
+        return config;
+      } else if (response.status === 404) {
+        console.log(`[loadDiagramConfig] Archivo de configuración no existe`);
+        return null;
+      } else {
+        throw new Error(`Error: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error(`[loadDiagramConfig] Error:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Obtiene los tipos MIME y extensiones soportadas
    * @returns {Object} Tipos soportados
    */
